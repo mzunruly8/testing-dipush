@@ -4,9 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DEPUSH NEON</title>
-
 <script src="https://cdn.tailwindcss.com"></script>
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
 
@@ -18,9 +16,7 @@ html, body {
     font-family: sans-serif;
 }
 
-.font-game {
-    font-family: 'Orbitron', sans-serif;
-}
+.font-game { font-family: 'Orbitron', sans-serif; }
 
 #gameCanvas {
     width: 100%;
@@ -45,9 +41,9 @@ html, body {
 
 <div id="startOverlay"
      class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 text-center z-50">
-    <h2 class="font-game text-3xl mb-4">NEON BATTLE</h2>
+    <h2 class="font-game text-3xl mb-4">LEVEL <span id="levelDisplay">1</span></h2>
     <p id="resultText" class="mb-8 text-slate-400">
-        Roll dice to spawn pushers.<br>Push the blue beam upward.
+        Roll dice to spawn pushers.<br>Push the beam upward.
     </p>
     <button id="startBtn"
             class="bg-blue-600 px-10 py-4 rounded-full text-xl font-game shadow-lg active:scale-95 transition">
@@ -59,6 +55,13 @@ html, body {
 <div class="flex justify-between font-game text-sm px-2">
     <div>PLAYER: <span id="pCount" class="text-blue-400">0</span></div>
     <div>ENEMY: <span id="eCount" class="text-red-400">0</span></div>
+</div>
+
+<div class="flex justify-between items-center px-2 font-game text-xs">
+    <div>SHAPE: <span id="shapeText">CIRCLE</span></div>
+    <button id="premiumBtn" class="bg-purple-600 px-3 py-1 rounded">
+        PREMIUM OFF
+    </button>
 </div>
 
 <div class="flex justify-center pb-4">
@@ -80,6 +83,9 @@ const rollBtn = document.getElementById('rollBtn');
 const pCount = document.getElementById('pCount');
 const eCount = document.getElementById('eCount');
 const statusText = document.getElementById('statusText');
+const levelDisplay = document.getElementById('levelDisplay');
+const shapeText = document.getElementById('shapeText');
+const premiumBtn = document.getElementById('premiumBtn');
 
 let barY = 0;
 let players = [];
@@ -89,6 +95,10 @@ let gameActive = false;
 let animationId;
 let canRoll = true;
 
+let level = 1;
+let playerShape = "circle";
+let premium = false;
+
 function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width;
@@ -96,11 +106,20 @@ function resizeCanvas() {
     barY = canvas.height / 2;
 }
 
+function updateShape() {
+    if (level >= 10) playerShape = "hex";
+    else if (level >= 6) playerShape = "square";
+    else if (level >= 3) playerShape = "triangle";
+    else playerShape = "circle";
+
+    shapeText.textContent = playerShape.toUpperCase();
+}
+
 function spawnPlayer() {
     players.push({
         x: 30 + Math.random() * (canvas.width - 60),
         y: canvas.height + 20,
-        speed: 2 + Math.random(),
+        speed: 2,
         r: 8
     });
 }
@@ -109,7 +128,7 @@ function spawnEnemy() {
     enemies.push({
         x: 30 + Math.random() * (canvas.width - 60),
         y: -20,
-        speed: 2 + Math.random(),
+        speed: 2 + level * 0.1,
         r: 8
     });
 }
@@ -121,7 +140,9 @@ function roll(e) {
     canRoll = false;
     rollBtn.style.opacity = 0.5;
 
-    const num = Math.floor(Math.random() * 6) + 1;
+    let num = Math.floor(Math.random() * 6) + 1;
+    if (premium) num += 1;
+
     statusText.textContent = "ROLLED: " + num;
 
     for (let i = 0; i < num; i++) {
@@ -132,7 +153,36 @@ function roll(e) {
         canRoll = true;
         rollBtn.style.opacity = 1;
         statusText.textContent = "READY";
-    }, 900);
+    }, premium ? 600 : 900);
+}
+
+function drawShape(p) {
+    ctx.beginPath();
+
+    if (playerShape === "circle") {
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    } 
+    else if (playerShape === "triangle") {
+        ctx.moveTo(p.x, p.y - p.r);
+        ctx.lineTo(p.x - p.r, p.y + p.r);
+        ctx.lineTo(p.x + p.r, p.y + p.r);
+        ctx.closePath();
+    }
+    else if (playerShape === "square") {
+        ctx.rect(p.x - p.r, p.y - p.r, p.r*2, p.r*2);
+    }
+    else if (playerShape === "hex") {
+        for (let i=0;i<6;i++){
+            let angle = Math.PI/3*i;
+            let x = p.x + p.r*Math.cos(angle);
+            let y = p.y + p.r*Math.sin(angle);
+            if(i===0) ctx.moveTo(x,y);
+            else ctx.lineTo(x,y);
+        }
+        ctx.closePath();
+    }
+
+    ctx.fill();
 }
 
 function loop() {
@@ -147,38 +197,39 @@ function loop() {
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
     enemyTimer++;
-    if (enemyTimer > 60) {
+    if (enemyTimer > Math.max(30, 60 - level * 3)) {
         spawnEnemy();
         enemyTimer = 0;
     }
 
     let force = 0;
 
-    // PLAYERS
+    let pushPower = 0.6;
+    if (playerShape === "triangle") pushPower = 0.7;
+    if (playerShape === "square") pushPower = 0.8;
+    if (playerShape === "hex") pushPower = 0.9;
+
     ctx.fillStyle = "#3b82f6";
     players.forEach((p,i)=>{
         p.y -= p.speed;
 
         if (p.y - p.r <= barY + 15 && p.y > barY) {
             p.y = barY + 15 + p.r;
-            force -= 0.6;
+            force -= pushPower;
         }
 
-        ctx.beginPath();
-        ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-        ctx.fill();
+        drawShape(p);
 
         if (p.y < -50) players.splice(i,1);
     });
 
-    // ENEMIES
     ctx.fillStyle = "#ef4444";
     enemies.forEach((e,i)=>{
         e.y += e.speed;
 
         if (e.y + e.r >= barY - 15 && e.y < barY) {
             e.y = barY - 15 - e.r;
-            force += 0.6;
+            force += 0.6 + level*0.02;
         }
 
         ctx.beginPath();
@@ -209,23 +260,35 @@ function start() {
     barY = canvas.height/2;
     gameActive = true;
     startOverlay.style.display = "none";
-    statusText.textContent = "READY";
+    levelDisplay.textContent = level;
+    updateShape();
     loop();
 }
 
 function end(win) {
     gameActive = false;
     cancelAnimationFrame(animationId);
+
+    if (win) {
+        level++;
+        updateShape();
+    }
+
     startOverlay.style.display = "flex";
+    levelDisplay.textContent = level;
+
     document.getElementById("resultText").innerHTML =
-        win ? "<span class='text-green-400 text-3xl font-game'>WON</span>"
-            : "<span class='text-red-400 text-3xl font-game'>OOPS</span>";
+        win ? "<span class='text-green-400 text-3xl font-game'>LEVEL UP</span>"
+            : "<span class='text-red-400 text-3xl font-game'>TRY AGAIN</span>";
 }
 
+premiumBtn.addEventListener("click", ()=>{
+    premium = !premium;
+    premiumBtn.textContent = premium ? "PREMIUM ON" : "PREMIUM OFF";
+});
+
 startBtn.addEventListener("click", start);
-startBtn.addEventListener("touchstart", start);
 rollBtn.addEventListener("click", roll);
-rollBtn.addEventListener("touchstart", roll);
 
 window.addEventListener("load", resizeCanvas);
 window.addEventListener("resize", resizeCanvas);
