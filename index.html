@@ -1,0 +1,168 @@
+<script>
+    lucide.createIcons();
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const startOverlay = document.getElementById('startOverlay');
+    const startBtn = document.getElementById('startBtn');
+    const rollBtn = document.getElementById('rollBtn');
+    const pCount = document.getElementById('pCount');
+    const eCount = document.getElementById('eCount');
+
+    let gameActive = false;
+    let barY = 0;
+    let players = [];
+    let enemies = [];
+    let enemyTimer = 0;
+    let animationId;
+    let canRoll = true;
+
+    function initLayout() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+        barY = canvas.height / 2;
+    }
+
+    function spawnPlayer() {
+        players.push({
+            x: 30 + Math.random() * (canvas.width - 60),
+            y: canvas.height + 20,
+            speed: 2.5 + Math.random() * 1.5,
+            r: 7
+        });
+    }
+
+    function spawnEnemy() {
+        enemies.push({
+            x: 30 + Math.random() * (canvas.width - 60),
+            y: -20,
+            speed: 2.5 + Math.random() * 1.5,
+            r: 7
+        });
+    }
+
+    function roll(e) {
+        if (e) e.preventDefault();
+        if (!gameActive || !canRoll) return;
+
+        canRoll = false;
+        rollBtn.style.opacity = 0.5;
+
+        const num = Math.floor(Math.random() * 6) + 1;
+
+        for (let i = 0; i < num; i++) {
+            setTimeout(spawnPlayer, i * 80);
+        }
+
+        setTimeout(() => {
+            canRoll = true;
+            rollBtn.style.opacity = 1;
+        }, 1000);
+    }
+
+    function loop() {
+        if (!gameActive) return;
+
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = '#1e293b';
+        for (let i = 0; i < canvas.height; i += 50) {
+            ctx.beginPath();
+            ctx.moveTo(0, i);
+            ctx.lineTo(canvas.width, i);
+            ctx.stroke();
+        }
+
+        enemyTimer++;
+        if (enemyTimer > 60) {
+            const num = Math.floor(Math.random() * 3) + 1;
+            for (let i = 0; i < num; i++) spawnEnemy();
+            enemyTimer = 0;
+        }
+
+        let force = 0;
+
+        ctx.fillStyle = '#60a5fa';
+        for (let i = players.length - 1; i >= 0; i--) {
+            let p = players[i];
+            p.y -= p.speed;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (p.y < barY + 15 && p.y > barY - 15) {
+                force -= 0.6;
+                p.y = barY + 15;
+            }
+
+            if (p.y < -50) players.splice(i, 1);
+        }
+
+        ctx.fillStyle = '#f87171';
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i];
+            e.y += e.speed;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (e.y > barY - 15 && e.y < barY + 15) {
+                force += 0.6;
+                e.y = barY - 15;
+            }
+
+            if (e.y > canvas.height + 50) enemies.splice(i, 1);
+        }
+
+        // Smooth bar movement
+        barY += force;
+        barY = Math.max(15, Math.min(canvas.height - 15, barY));
+
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, barY - 15, canvas.width, 30);
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(0, barY - 15, canvas.width, 30);
+
+        pCount.innerText = players.length;
+        eCount.innerText = enemies.length;
+
+        if (barY <= 15) end(true);
+        else if (barY >= canvas.height - 15) end(false);
+        else animationId = requestAnimationFrame(loop);
+    }
+
+    function end(win) {
+        gameActive = false;
+        cancelAnimationFrame(animationId);
+
+        startOverlay.classList.remove('hidden');
+        document.getElementById('resultText').innerHTML = win ?
+            '<span class="text-green-400 text-3xl font-bold font-game">VICTORY</span>' :
+            '<span class="text-red-500 text-3xl font-bold font-game">DEFEAT</span>';
+
+        startBtn.innerText = "PLAY AGAIN";
+    }
+
+    function start() {
+        initLayout();
+        players = [];
+        enemies = [];
+        enemyTimer = 0;
+        barY = canvas.height / 2;
+        gameActive = true;
+        canRoll = true;
+        rollBtn.style.opacity = 1;
+
+        startOverlay.classList.add('hidden');
+        loop();
+    }
+
+    startBtn.addEventListener('click', start);
+    rollBtn.addEventListener('click', roll);
+    rollBtn.addEventListener('touchstart', roll);
+
+    window.addEventListener('load', initLayout);
+    window.addEventListener('resize', initLayout);
+</script>
