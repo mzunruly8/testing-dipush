@@ -38,27 +38,15 @@ html, body {
 
 <div class="relative flex-1 rounded-xl overflow-hidden border border-slate-800 bg-slate-900 shadow-2xl">
 <canvas id="gameCanvas"></canvas>
-
-<div id="startOverlay"
-     class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 text-center z-50">
-    <h2 class="font-game text-3xl mb-4">LEVEL <span id="levelDisplay">1</span></h2>
-    <p id="resultText" class="mb-8 text-slate-400">
-        Roll dice to spawn pushers.<br>Push the beam upward.
-    </p>
-    <button id="startBtn"
-            class="bg-blue-600 px-10 py-4 rounded-full text-xl font-game shadow-lg active:scale-95 transition">
-        START
-    </button>
-</div>
 </div>
 
 <div class="flex justify-between font-game text-sm px-2">
-    <div>PLAYER: <span id="pCount" class="text-blue-400">0</span></div>
-    <div>ENEMY: <span id="eCount" class="text-red-400">0</span></div>
+    <div>SCORE: <span id="scoreText" class="text-green-400">0</span></div>
+    <div>STREAK: <span id="streakText" class="text-yellow-400">0</span></div>
 </div>
 
 <div class="flex justify-between items-center px-2 font-game text-xs">
-    <div>SHAPE: <span id="shapeText">CIRCLE</span></div>
+    <div>LEVEL: <span id="levelText">1</span> | SHAPE: <span id="shapeText">CIRCLE</span></div>
     <button id="premiumBtn" class="bg-purple-600 px-3 py-1 rounded">
         PREMIUM OFF
     </button>
@@ -66,8 +54,8 @@ html, body {
 
 <div class="flex justify-center pb-4">
     <button id="rollBtn"
-            class="bg-blue-600 w-24 h-24 rounded-3xl shadow-lg active:scale-95 transition font-game">
-        DICE
+            class="bg-blue-600 w-28 h-28 rounded-3xl shadow-lg active:scale-95 transition font-game text-xl">
+        START
     </button>
 </div>
 
@@ -77,14 +65,12 @@ html, body {
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const startOverlay = document.getElementById('startOverlay');
-const startBtn = document.getElementById('startBtn');
 const rollBtn = document.getElementById('rollBtn');
-const pCount = document.getElementById('pCount');
-const eCount = document.getElementById('eCount');
-const statusText = document.getElementById('statusText');
-const levelDisplay = document.getElementById('levelDisplay');
+const scoreText = document.getElementById('scoreText');
+const streakText = document.getElementById('streakText');
+const levelText = document.getElementById('levelText');
 const shapeText = document.getElementById('shapeText');
+const statusText = document.getElementById('statusText');
 const premiumBtn = document.getElementById('premiumBtn');
 
 let barY = 0;
@@ -99,6 +85,11 @@ let level = 1;
 let playerShape = "circle";
 let premium = false;
 
+let score = 0;
+let streak = 0;
+let combo = 1;
+let timeAlive = 0;
+
 function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width;
@@ -111,7 +102,6 @@ function updateShape() {
     else if (level >= 6) playerShape = "square";
     else if (level >= 3) playerShape = "triangle";
     else playerShape = "circle";
-
     shapeText.textContent = playerShape.toUpperCase();
 }
 
@@ -128,50 +118,22 @@ function spawnEnemy() {
     enemies.push({
         x: 30 + Math.random() * (canvas.width - 60),
         y: -20,
-        speed: 2 + level * 0.1,
+        speed: 2 + level * 0.15,
         r: 8
     });
 }
 
-function roll(e) {
-    if (e) e.preventDefault();
-    if (!gameActive || !canRoll) return;
-
-    canRoll = false;
-    rollBtn.style.opacity = 0.5;
-
-    let num = Math.floor(Math.random() * 6) + 1;
-    if (premium) num += 1;
-
-    statusText.textContent = "ROLLED: " + num;
-
-    for (let i = 0; i < num; i++) {
-        setTimeout(spawnPlayer, i * 120);
-    }
-
-    setTimeout(() => {
-        canRoll = true;
-        rollBtn.style.opacity = 1;
-        statusText.textContent = "READY";
-    }, premium ? 600 : 900);
-}
-
 function drawShape(p) {
     ctx.beginPath();
-
-    if (playerShape === "circle") {
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    } 
+    if (playerShape === "circle") ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
     else if (playerShape === "triangle") {
         ctx.moveTo(p.x, p.y - p.r);
         ctx.lineTo(p.x - p.r, p.y + p.r);
         ctx.lineTo(p.x + p.r, p.y + p.r);
         ctx.closePath();
     }
-    else if (playerShape === "square") {
-        ctx.rect(p.x - p.r, p.y - p.r, p.r*2, p.r*2);
-    }
-    else if (playerShape === "hex") {
+    else if (playerShape === "square") ctx.rect(p.x - p.r, p.y - p.r, p.r*2, p.r*2);
+    else {
         for (let i=0;i<6;i++){
             let angle = Math.PI/3*i;
             let x = p.x + p.r*Math.cos(angle);
@@ -181,8 +143,72 @@ function drawShape(p) {
         }
         ctx.closePath();
     }
-
     ctx.fill();
+}
+
+function roll(e) {
+    if (e) e.preventDefault();
+
+    if (!gameActive) {
+        players = [];
+        enemies = [];
+        score = 0;
+        streak = 0;
+        combo = 1;
+        timeAlive = 0;
+        enemyTimer = 0;
+        barY = canvas.height / 2;
+        gameActive = true;
+        rollBtn.textContent = "DICE";
+        statusText.textContent = "READY";
+        loop();
+        return;
+    }
+
+    if (!canRoll) return;
+
+    canRoll = false;
+    rollBtn.style.opacity = 0.7;
+
+    let rollDuration = 600;
+    let rollInterval = 60;
+    let elapsed = 0;
+
+    const rolling = setInterval(() => {
+        let temp = Math.floor(Math.random() * 6) + 1;
+        rollBtn.textContent = temp;
+        elapsed += rollInterval;
+
+        if (elapsed >= rollDuration) {
+            clearInterval(rolling);
+
+            let finalRoll = Math.floor(Math.random() * 6) + 1;
+            if (premium) finalRoll += 1;
+
+            rollBtn.textContent = finalRoll;
+
+            if (finalRoll >= 6) {
+                rollBtn.classList.remove("bg-blue-600");
+                rollBtn.classList.add("bg-yellow-500");
+                combo++;
+            } else {
+                combo = 1;
+            }
+
+            for (let i = 0; i < finalRoll; i++) {
+                setTimeout(spawnPlayer, i * 120);
+            }
+
+            setTimeout(() => {
+                canRoll = true;
+                rollBtn.style.opacity = 1;
+                rollBtn.textContent = "DICE";
+                rollBtn.classList.remove("bg-yellow-500");
+                rollBtn.classList.add("bg-blue-600");
+            }, premium ? 600 : 900);
+        }
+
+    }, rollInterval);
 }
 
 function loop() {
@@ -196,90 +222,71 @@ function loop() {
     ctx.fillStyle = gradient;
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
+    timeAlive++;
+
+    if (timeAlive % 900 === 0) level++; // level up every ~15 sec
+
     enemyTimer++;
-    if (enemyTimer > Math.max(30, 60 - level * 3)) {
+    if (enemyTimer > Math.max(25, 60 - level * 4)) {
         spawnEnemy();
         enemyTimer = 0;
     }
 
     let force = 0;
 
-    let pushPower = 0.6;
-    if (playerShape === "triangle") pushPower = 0.7;
-    if (playerShape === "square") pushPower = 0.8;
-    if (playerShape === "hex") pushPower = 0.9;
-
     ctx.fillStyle = "#3b82f6";
     players.forEach((p,i)=>{
         p.y -= p.speed;
-
         if (p.y - p.r <= barY + 15 && p.y > barY) {
             p.y = barY + 15 + p.r;
-            force -= pushPower;
+            force -= 0.6 * combo;
+            score += 2 * combo;
         }
-
         drawShape(p);
-
         if (p.y < -50) players.splice(i,1);
     });
 
     ctx.fillStyle = "#ef4444";
     enemies.forEach((e,i)=>{
         e.y += e.speed;
-
         if (e.y + e.r >= barY - 15 && e.y < barY) {
             e.y = barY - 15 - e.r;
-            force += 0.6 + level*0.02;
+            force += 0.6 + level*0.03;
         }
-
         ctx.beginPath();
         ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
         ctx.fill();
-
         if (e.y > canvas.height+50) enemies.splice(i,1);
     });
 
     barY += force;
     barY = Math.max(20, Math.min(canvas.height-20, barY));
 
+    if (barY < canvas.height/2) score++;
+
     ctx.fillStyle = "#0ea5e9";
     ctx.fillRect(0, barY-15, canvas.width, 30);
 
-    pCount.textContent = players.length;
-    eCount.textContent = enemies.length;
+    scoreText.textContent = score;
+    streakText.textContent = streak;
+    levelText.textContent = level;
 
-    if (barY <= 20) end(true);
-    else if (barY >= canvas.height-20) end(false);
+    if (barY <= 20) {
+        streak++;
+        end(true);
+    }
+    else if (barY >= canvas.height-20) {
+        streak = 0;
+        end(false);
+    }
     else animationId = requestAnimationFrame(loop);
-}
-
-function start() {
-    players = [];
-    enemies = [];
-    enemyTimer = 0;
-    barY = canvas.height/2;
-    gameActive = true;
-    startOverlay.style.display = "none";
-    levelDisplay.textContent = level;
-    updateShape();
-    loop();
 }
 
 function end(win) {
     gameActive = false;
     cancelAnimationFrame(animationId);
-
-    if (win) {
-        level++;
-        updateShape();
-    }
-
-    startOverlay.style.display = "flex";
-    levelDisplay.textContent = level;
-
-    document.getElementById("resultText").innerHTML =
-        win ? "<span class='text-green-400 text-3xl font-game'>LEVEL UP</span>"
-            : "<span class='text-red-400 text-3xl font-game'>TRY AGAIN</span>";
+    rollBtn.textContent = "START";
+    statusText.textContent = win ? "WIN" : "TRY AGAIN";
 }
 
 premiumBtn.addEventListener("click", ()=>{
@@ -287,11 +294,12 @@ premiumBtn.addEventListener("click", ()=>{
     premiumBtn.textContent = premium ? "PREMIUM ON" : "PREMIUM OFF";
 });
 
-startBtn.addEventListener("click", start);
 rollBtn.addEventListener("click", roll);
 
 window.addEventListener("load", resizeCanvas);
 window.addEventListener("resize", resizeCanvas);
+
+updateShape();
 </script>
 
 </body>
