@@ -34,7 +34,7 @@ html, body {
 <body class="flex flex-col h-screen text-white">
 
 <header class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 shrink-0">
-    <h1 class="font-game text-blue-500 font-bold tracking-tight">DICE PUSH</h1>
+    <h1 class="font-game text-blue-500 font-bold tracking-tight">DEPUSH</h1>
     <div id="statusText" class="font-game text-xs text-yellow-400">READY</div>
 </header>
 
@@ -64,7 +64,7 @@ html, body {
 <div class="flex justify-center pb-4">
     <button id="rollBtn"
             class="bg-blue-600 w-24 h-24 rounded-3xl shadow-lg active:scale-95 transition font-game">
-        ROLL
+        DICE
     </button>
 </div>
 
@@ -218,8 +218,8 @@ function end(win) {
     cancelAnimationFrame(animationId);
     startOverlay.style.display = "flex";
     document.getElementById("resultText").innerHTML =
-        win ? "<span class='text-green-400 text-3xl font-game'>VICTORY</span>"
-            : "<span class='text-red-400 text-3xl font-game'>DEFEAT</span>";
+        win ? "<span class='text-green-400 text-3xl font-game'>WON</span>"
+            : "<span class='text-red-400 text-3xl font-game'>OOPS</span>";
 }
 
 startBtn.addEventListener("click", start);
