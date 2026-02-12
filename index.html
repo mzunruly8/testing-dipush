@@ -2,114 +2,97 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DICE PUSH NEON</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.0/lucide.min.js"></script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
 
-body {
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #020617;
     font-family: sans-serif;
-    background-color: #020617;
-    color: #f8fafc;
-    touch-action: none;
-    overflow: hidden;
-    width: 100%;
-    height: 100vh;
 }
 
-.font-game { font-family: 'Orbitron', sans-serif; }
+.font-game {
+    font-family: 'Orbitron', sans-serif;
+}
 
 #gameCanvas {
-    display: block;
     width: 100%;
     height: 100%;
-}
-
-.dice-btn {
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
-    box-shadow: 0 6px 0 #1d4ed8;
-    transition: all 0.05s;
-}
-
-.dice-btn:active {
-    transform: translateY(4px);
-    box-shadow: 0 2px 0 #1d4ed8;
+    display: block;
+    touch-action: none;
 }
 </style>
 </head>
 
-<body class="flex flex-col h-full">
+<body class="flex flex-col h-screen text-white">
 
 <header class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 shrink-0">
-    <h1 class="font-game text-blue-500 font-bold tracking-tighter">DICE PUSH</h1>
-    <div class="font-game text-[10px] text-yellow-400">READY</div>
+    <h1 class="font-game text-blue-500 font-bold tracking-tight">DICE PUSH</h1>
+    <div class="font-game text-xs text-yellow-400">NEON MODE</div>
 </header>
 
-<main class="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
+<main class="flex-1 flex flex-col p-3 gap-3">
 
-<div class="relative flex-1 border border-slate-800 rounded-xl overflow-hidden bg-slate-900 shadow-2xl">
+<div class="relative flex-1 rounded-xl overflow-hidden border border-slate-800 bg-slate-900 shadow-2xl">
 <canvas id="gameCanvas"></canvas>
 
-<div id="startOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 p-6 text-center z-50">
-    <h2 class="font-game text-2xl mb-4">NEON BATTLE</h2>
+<div id="startOverlay"
+     class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 text-center z-50">
+    <h2 class="font-game text-3xl mb-4">NEON BATTLE</h2>
     <p id="resultText" class="mb-8 text-slate-400">
-        Roll dice to spawn pushers.<br>Push the blue beam to the top!
+        Roll dice to spawn pushers.<br>Push the blue beam upward.
     </p>
-    <button id="startBtn" class="bg-blue-600 text-white font-game px-12 py-4 rounded-full text-xl shadow-lg active:scale-95 transition-transform">
+    <button id="startBtn"
+            class="bg-blue-600 px-10 py-4 rounded-full text-xl font-game shadow-lg active:scale-95 transition">
         START
     </button>
 </div>
 </div>
 
-<div class="grid grid-cols-2 gap-3 shrink-0">
-    <div class="bg-slate-900 p-3 rounded-xl border border-blue-900/30">
-        <span class="block text-[10px] text-slate-500 font-game">PLAYER</span>
-        <span id="pCount" class="text-2xl font-bold text-blue-400">0</span>
-    </div>
-    <div class="bg-slate-900 p-3 rounded-xl border border-red-900/30 text-right">
-        <span class="block text-[10px] text-slate-500 font-game">ENEMY</span>
-        <span id="eCount" class="text-2xl font-bold text-red-400">0</span>
-    </div>
+<div class="flex justify-between font-game text-sm px-2">
+    <div>PLAYER: <span id="pCount" class="text-blue-400">0</span></div>
+    <div>ENEMY: <span id="eCount" class="text-red-400">0</span></div>
 </div>
 
-<div class="flex justify-center pb-6 shrink-0">
-    <button id="rollBtn" class="dice-btn w-24 h-24 rounded-3xl flex flex-col items-center justify-center gap-1">
-        <i data-lucide="dice-6" class="w-10 h-10 text-white"></i>
-        <span class="font-game text-[10px] text-white font-bold">ROLL</span>
+<div class="flex justify-center pb-4">
+    <button id="rollBtn"
+            class="bg-blue-600 w-24 h-24 rounded-3xl shadow-lg active:scale-95 transition font-game">
+        ROLL
     </button>
 </div>
 
 </main>
 
 <script>
-if (window.lucide) {
-    lucide.createIcons();
-}
-
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+
 const startOverlay = document.getElementById('startOverlay');
 const startBtn = document.getElementById('startBtn');
 const rollBtn = document.getElementById('rollBtn');
 const pCount = document.getElementById('pCount');
 const eCount = document.getElementById('eCount');
 
-let gameActive = false;
 let barY = 0;
 let players = [];
 let enemies = [];
 let enemyTimer = 0;
+let gameActive = false;
 let animationId;
 let canRoll = true;
 let shake = 0;
 
-function initLayout() {
-    canvas.width = canvas.parentElement.clientWidth;
-    canvas.height = canvas.parentElement.clientHeight;
+function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
     barY = canvas.height / 2;
 }
 
@@ -117,8 +100,8 @@ function spawnPlayer() {
     players.push({
         x: 30 + Math.random() * (canvas.width - 60),
         y: canvas.height + 20,
-        speed: 2.5 + Math.random() * 1.5,
-        r: 7
+        speed: 2 + Math.random(),
+        r: 8
     });
 }
 
@@ -126,8 +109,8 @@ function spawnEnemy() {
     enemies.push({
         x: 30 + Math.random() * (canvas.width - 60),
         y: -20,
-        speed: 2.5 + Math.random() * 1.5,
-        r: 7
+        speed: 2 + Math.random(),
+        r: 8
     });
 }
 
@@ -146,7 +129,7 @@ function roll(e) {
     setTimeout(() => {
         canRoll = true;
         rollBtn.style.opacity = 1;
-    }, 1000);
+    }, 900);
 }
 
 function loop() {
@@ -155,121 +138,94 @@ function loop() {
     ctx.setTransform(1,0,0,1,0,0);
 
     if (shake > 0) {
-        ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+        ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
         shake *= 0.85;
     }
 
-    let gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, '#020617');
-    gradient.addColorStop(1, '#0f172a');
+    let gradient = ctx.createLinearGradient(0,0,0,canvas.height);
+    gradient.addColorStop(0,"#020617");
+    gradient.addColorStop(1,"#0f172a");
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
     enemyTimer++;
     if (enemyTimer > 60) {
-        const num = Math.floor(Math.random() * 3) + 1;
-        for (let i = 0; i < num; i++) spawnEnemy();
+        spawnEnemy();
         enemyTimer = 0;
     }
 
     let force = 0;
 
-    ctx.fillStyle = '#60a5fa';
-    for (let i = players.length - 1; i >= 0; i--) {
-        let p = players[i];
+    ctx.fillStyle = "#3b82f6";
+    players.forEach((p,i)=>{
         p.y -= p.speed;
-
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#3b82f6';
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
         ctx.fill();
-        ctx.shadowBlur = 0;
 
-        if (p.y < barY + 15 && p.y > barY - 15) {
-            force -= 0.6;
-            p.y = barY + 15;
+        if (Math.abs(p.y - barY) < 15) {
+            force -= 0.5;
+            shake = 6;
         }
 
-        if (p.y < -50) players.splice(i, 1);
-    }
+        if (p.y < -50) players.splice(i,1);
+    });
 
-    ctx.fillStyle = '#f87171';
-    for (let i = enemies.length - 1; i >= 0; i--) {
-        let e = enemies[i];
+    ctx.fillStyle = "#ef4444";
+    enemies.forEach((e,i)=>{
         e.y += e.speed;
-
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#ef4444';
         ctx.beginPath();
-        ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+        ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
         ctx.fill();
-        ctx.shadowBlur = 0;
 
-        if (e.y > barY - 15 && e.y < barY + 15) {
-            force += 0.6;
-            e.y = barY - 15;
+        if (Math.abs(e.y - barY) < 15) {
+            force += 0.5;
+            shake = 6;
         }
 
-        if (e.y > canvas.height + 50) enemies.splice(i, 1);
-    }
-
-    if (Math.abs(force) > 3) shake = 8;
+        if (e.y > canvas.height+50) enemies.splice(i,1);
+    });
 
     barY += force;
-    barY = Math.max(15, Math.min(canvas.height - 15, barY));
+    barY = Math.max(20, Math.min(canvas.height-20, barY));
 
-    ctx.shadowBlur = 25;
-    ctx.shadowColor = '#3b82f6';
-    ctx.fillStyle = '#0ea5e9';
-    ctx.fillRect(0, barY - 15, canvas.width, 30);
-    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#0ea5e9";
+    ctx.fillRect(0, barY-15, canvas.width, 30);
 
-    ctx.strokeStyle = '#60a5fa';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(0, barY - 15, canvas.width, 30);
+    pCount.textContent = players.length;
+    eCount.textContent = enemies.length;
 
-    pCount.innerText = players.length;
-    eCount.innerText = enemies.length;
-
-    if (barY <= 15) end(true);
-    else if (barY >= canvas.height - 15) end(false);
+    if (barY <= 20) end(true);
+    else if (barY >= canvas.height-20) end(false);
     else animationId = requestAnimationFrame(loop);
+}
+
+function start() {
+    players = [];
+    enemies = [];
+    enemyTimer = 0;
+    barY = canvas.height/2;
+    gameActive = true;
+    startOverlay.style.display = "none";
+    loop();
 }
 
 function end(win) {
     gameActive = false;
     cancelAnimationFrame(animationId);
-
     startOverlay.style.display = "flex";
-
-    document.getElementById('resultText').innerHTML = win
-        ? '<span class="text-green-400 text-4xl font-bold font-game animate-pulse">VICTORY</span>'
-        : '<span class="text-red-500 text-4xl font-bold font-game animate-pulse">DEFEAT</span>';
-
-    startBtn.innerText = "PLAY AGAIN";
+    document.getElementById("resultText").innerHTML =
+        win ? "<span class='text-green-400 text-3xl font-game'>VICTORY</span>"
+            : "<span class='text-red-400 text-3xl font-game'>DEFEAT</span>";
 }
 
-function start() {
-    initLayout();
-    players = [];
-    enemies = [];
-    enemyTimer = 0;
-    barY = canvas.height / 2;
-    gameActive = true;
-    canRoll = true;
-    rollBtn.style.opacity = 1;
+startBtn.addEventListener("click", start);
+startBtn.addEventListener("touchstart", start);
+rollBtn.addEventListener("click", roll);
+rollBtn.addEventListener("touchstart", roll);
 
-    startOverlay.style.display = "none";
-    loop();
-}
-
-startBtn.addEventListener('click', start);
-rollBtn.addEventListener('click', roll);
-rollBtn.addEventListener('touchstart', roll);
-
-window.addEventListener('load', initLayout);
-window.addEventListener('resize', initLayout);
+window.addEventListener("load", resizeCanvas);
+window.addEventListener("resize", resizeCanvas);
 </script>
 
 </body>
