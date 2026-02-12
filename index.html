@@ -1,69 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DEPUSH NEON</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
-
-html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    background: #020617;
-    font-family: sans-serif;
-}
-
-.font-game { font-family: 'Orbitron', sans-serif; }
-
-#gameCanvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-    touch-action: none;
-}
-</style>
-</head>
-
-<body class="flex flex-col h-screen text-white">
-
-<header class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 shrink-0">
-    <h1 class="font-game text-blue-500 font-bold tracking-tight">DEPUSH</h1>
-    <div id="statusText" class="font-game text-xs text-yellow-400">READY</div>
-</header>
-
-<main class="flex-1 flex flex-col p-3 gap-3">
-
-<div class="relative flex-1 rounded-xl overflow-hidden border border-slate-800 bg-slate-900 shadow-2xl">
-<canvas id="gameCanvas"></canvas>
-</div>
-
-<div class="flex justify-between font-game text-sm px-2">
-    <div>SCORE: <span id="scoreText" class="text-green-400">0</span></div>
-    <div>STREAK: <span id="streakText" class="text-yellow-400">0</span></div>
-</div>
-
-<div class="flex justify-between items-center px-2 font-game text-xs">
-    <div>LEVEL: <span id="levelText">1</span> | SHAPE: <span id="shapeText">CIRCLE</span></div>
-    <button id="premiumBtn" class="bg-purple-600 px-3 py-1 rounded">
-        PREMIUM OFF
-    </button>
-</div>
-
-<div class="flex justify-center pb-4">
-    <button id="rollBtn"
-            class="bg-blue-600 w-28 h-28 rounded-3xl shadow-lg active:scale-95 transition font-game text-xl">
-        START
-    </button>
-</div>
-
-</main>
-
 <script>
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', { alpha: false });
 
 const rollBtn = document.getElementById('rollBtn');
 const scoreText = document.getElementById('scoreText');
@@ -76,13 +13,18 @@ const premiumBtn = document.getElementById('premiumBtn');
 let barY = 0;
 let players = [];
 let enemies = [];
+let obstacles = [];
+let particles = [];
+let multiplierGates = [];
+
 let enemyTimer = 0;
-let gameActive = false;
+let obstacleTimer = 0;
 let animationId;
+
+let gameActive = false;
 let canRoll = true;
 
 let level = 1;
-let playerShape = "circle";
 let premium = false;
 
 let score = 0;
@@ -90,27 +32,27 @@ let streak = 0;
 let combo = 1;
 let timeAlive = 0;
 
+let cannonX = 0;
+let cannonAngle = -Math.PI/2;
+let barVelocity = 0;
+
 function resizeCanvas() {
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    const parent = document.getElementById('canvasParent');
+    canvas.width = parent.clientWidth;
+    canvas.height = parent.clientHeight;
+    cannonX = canvas.width / 2;
     barY = canvas.height / 2;
 }
 
-function updateShape() {
-    if (level >= 10) playerShape = "hex";
-    else if (level >= 6) playerShape = "square";
-    else if (level >= 3) playerShape = "triangle";
-    else playerShape = "circle";
-    shapeText.textContent = playerShape.toUpperCase();
-}
-
-function spawnPlayer() {
+function spawnPlayer(x = cannonX, y = canvas.height - 30, vx, vy) {
+    const speed = 7;
     players.push({
-        x: 30 + Math.random() * (canvas.width - 60),
-        y: canvas.height + 20,
-        speed: 2,
-        r: 8
+        x,
+        y,
+        vx: vx ?? Math.cos(cannonAngle) * speed,
+        vy: vy ?? Math.sin(cannonAngle) * speed,
+        r: 8,
+        dead: false
     });
 }
 
@@ -118,189 +60,220 @@ function spawnEnemy() {
     enemies.push({
         x: 30 + Math.random() * (canvas.width - 60),
         y: -20,
-        speed: 2 + level * 0.15,
-        r: 8
+        speed: 2 + level * 0.2,
+        r: 8,
+        dead: false
     });
 }
 
-function drawShape(p) {
-    ctx.beginPath();
-    if (playerShape === "circle") ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-    else if (playerShape === "triangle") {
-        ctx.moveTo(p.x, p.y - p.r);
-        ctx.lineTo(p.x - p.r, p.y + p.r);
-        ctx.lineTo(p.x + p.r, p.y + p.r);
-        ctx.closePath();
-    }
-    else if (playerShape === "square") ctx.rect(p.x - p.r, p.y - p.r, p.r*2, p.r*2);
-    else {
-        for (let i=0;i<6;i++){
-            let angle = Math.PI/3*i;
-            let x = p.x + p.r*Math.cos(angle);
-            let y = p.y + p.r*Math.sin(angle);
-            if(i===0) ctx.moveTo(x,y);
-            else ctx.lineTo(x,y);
-        }
-        ctx.closePath();
-    }
-    ctx.fill();
+function spawnObstacle() {
+    obstacles.push({
+        x: 50 + Math.random() * (canvas.width - 100),
+        y: -20,
+        w: 60,
+        h: 14,
+        speed: 1.5 + level * 0.1
+    });
 }
 
-function roll(e) {
-    if (e) e.preventDefault();
+function spawnGate() {
+    multiplierGates = [{
+        x: 60 + Math.random() * (canvas.width - 120),
+        y: barY + 100,
+        w: 70,
+        h: 40,
+        val: 2 + Math.floor(level/3)
+    }];
+}
 
-    if (!gameActive) {
-        players = [];
-        enemies = [];
-        score = 0;
-        streak = 0;
-        combo = 1;
-        timeAlive = 0;
-        enemyTimer = 0;
-        barY = canvas.height / 2;
-        gameActive = true;
-        rollBtn.textContent = "DICE";
-        statusText.textContent = "READY";
-        loop();
-        return;
+function createBurst(x,y,color="#22c55e"){
+    for(let i=0;i<6;i++){
+        particles.push({
+            x,y,
+            vx:(Math.random()-0.5)*6,
+            vy:(Math.random()-0.5)*6,
+            life:1,
+            color
+        });
     }
+}
 
-    if (!canRoll) return;
-
+function triggerFire() {
+    if (!gameActive || !canRoll) return;
     canRoll = false;
-    rollBtn.style.opacity = 0.7;
 
-    let rollDuration = 600;
-    let rollInterval = 60;
     let elapsed = 0;
-
     const rolling = setInterval(() => {
-        let temp = Math.floor(Math.random() * 6) + 1;
-        rollBtn.textContent = temp;
-        elapsed += rollInterval;
+        rollBtn.textContent = "ROLLING: " + (Math.floor(Math.random()*6)+1);
+        elapsed += 60;
 
-        if (elapsed >= rollDuration) {
+        if (elapsed >= 500) {
             clearInterval(rolling);
 
-            let finalRoll = Math.floor(Math.random() * 6) + 1;
-            if (premium) finalRoll += 1;
+            let roll = Math.floor(Math.random()*6)+1;
+            if (premium) roll++;
 
-            rollBtn.textContent = finalRoll;
+            rollBtn.textContent = "FIRED " + roll;
 
-            if (finalRoll >= 6) {
-                rollBtn.classList.remove("bg-blue-600");
-                rollBtn.classList.add("bg-yellow-500");
-                combo++;
-            } else {
-                combo = 1;
+            if (roll >= 6) combo++;
+            else combo = 1;
+
+            for (let i=0;i<roll;i++){
+                setTimeout(()=>spawnPlayer(), i*70);
             }
 
-            for (let i = 0; i < finalRoll; i++) {
-                setTimeout(spawnPlayer, i * 120);
-            }
-
-            setTimeout(() => {
+            setTimeout(()=>{
                 canRoll = true;
-                rollBtn.style.opacity = 1;
-                rollBtn.textContent = "DICE";
-                rollBtn.classList.remove("bg-yellow-500");
-                rollBtn.classList.add("bg-blue-600");
-            }, premium ? 600 : 900);
+                if(gameActive) rollBtn.textContent="DRAG TO AIM - RELEASE TO FIRE";
+            },600);
         }
-
-    }, rollInterval);
+    },60);
 }
 
-function loop() {
-    if (!gameActive) return;
+function loop(){
+    if(!gameActive) return;
 
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    let gradient = ctx.createLinearGradient(0,0,0,canvas.height);
-    gradient.addColorStop(0,"#020617");
-    gradient.addColorStop(1,"#0f172a");
-    ctx.fillStyle = gradient;
+    ctx.fillStyle="#020617";
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
     timeAlive++;
 
-    if (timeAlive % 900 === 0) level++; // level up every ~15 sec
-
     enemyTimer++;
-    if (enemyTimer > Math.max(25, 60 - level * 4)) {
+    if(enemyTimer>Math.max(20,40-level*3)){
         spawnEnemy();
-        enemyTimer = 0;
+        enemyTimer=0;
     }
 
-    let force = 0;
+    obstacleTimer++;
+    if(obstacleTimer>160-level*6){
+        spawnObstacle();
+        obstacleTimer=0;
+    }
 
-    ctx.fillStyle = "#3b82f6";
-    players.forEach((p,i)=>{
-        p.y -= p.speed;
-        if (p.y - p.r <= barY + 15 && p.y > barY) {
-            p.y = barY + 15 + p.r;
-            force -= 0.6 * combo;
-            score += 2 * combo;
-        }
-        drawShape(p);
-        if (p.y < -50) players.splice(i,1);
+    let pushForce = 0;
+    const barTop = barY-15;
+    const barBottom = barY+15;
+
+    // Obstacles
+    ctx.fillStyle="#ef4444";
+    obstacles.forEach(o=>{
+        o.y+=o.speed;
+        ctx.fillRect(o.x-o.w/2,o.y-o.h/2,o.w,o.h);
     });
 
-    ctx.fillStyle = "#ef4444";
-    enemies.forEach((e,i)=>{
-        e.y += e.speed;
-        if (e.y + e.r >= barY - 15 && e.y < barY) {
-            e.y = barY - 15 - e.r;
-            force += 0.6 + level*0.03;
+    // Players
+    ctx.fillStyle="#3b82f6";
+    for(let i=players.length-1;i>=0;i--){
+        let p=players[i];
+        p.x+=p.vx;
+        p.y+=p.vy;
+
+        if(p.x<8||p.x>canvas.width-8) p.vx*=-1;
+
+        if(!p.dead && p.y<=barBottom && p.y>=barTop){
+            pushForce -= 1.2*combo;
+            createBurst(p.x,p.y,"#3b82f6");
+            p.dead=true;
+            score+=combo*2;
         }
+
+        if(p.dead||p.y<-40){
+            players.splice(i,1);
+            continue;
+        }
+
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        ctx.fill();
+    }
+
+    // Enemies
+    ctx.fillStyle="#ef4444";
+    for(let i=enemies.length-1;i>=0;i--){
+        let e=enemies[i];
+        e.y+=e.speed;
+
+        if(!e.dead && e.y>=barTop && e.y<=barBottom){
+            pushForce += 1.4+level*0.1;
+            createBurst(e.x,e.y,"#ef4444");
+            e.dead=true;
+        }
+
+        if(e.dead||e.y>canvas.height+40){
+            enemies.splice(i,1);
+            continue;
+        }
+
         ctx.beginPath();
         ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
         ctx.fill();
-        if (e.y > canvas.height+50) enemies.splice(i,1);
-    });
+    }
 
-    barY += force;
-    barY = Math.max(20, Math.min(canvas.height-20, barY));
+    // Smooth physics
+    barVelocity += pushForce;
+    barVelocity *= 0.9; // damping
+    barVelocity += 0.15; // light gravity
 
-    if (barY < canvas.height/2) score++;
+    barY += barVelocity;
+    barY = Math.max(20,Math.min(canvas.height-20,barY));
 
-    ctx.fillStyle = "#0ea5e9";
-    ctx.fillRect(0, barY-15, canvas.width, 30);
+    ctx.fillStyle="#1e293b";
+    ctx.fillRect(0,barY-15,canvas.width,30);
+    ctx.strokeStyle="#0ea5e9";
+    ctx.strokeRect(0,barY-15,canvas.width,30);
 
-    scoreText.textContent = score;
-    streakText.textContent = streak;
-    levelText.textContent = level;
+    scoreText.textContent=Math.floor(score);
+    streakText.textContent=streak;
+    levelText.textContent=level;
 
-    if (barY <= 20) {
+    if(barY<=21){
         streak++;
+        level++;
         end(true);
     }
-    else if (barY >= canvas.height-20) {
-        streak = 0;
+    else if(barY>=canvas.height-21){
+        streak=0;
         end(false);
     }
-    else animationId = requestAnimationFrame(loop);
+    else animationId=requestAnimationFrame(loop);
 }
 
-function end(win) {
-    gameActive = false;
+function startGame(){
+    players=[]; enemies=[]; obstacles=[]; particles=[];
+    score=0; combo=1; timeAlive=0;
+    barVelocity=0;
+    barY=canvas.height/2;
+    gameActive=true;
+    rollBtn.textContent="DRAG TO AIM - RELEASE TO FIRE";
+    statusText.textContent="BATTLE";
+    spawnGate();
+    loop();
+}
+
+function end(win){
+    gameActive=false;
     cancelAnimationFrame(animationId);
-    rollBtn.textContent = "START";
-    statusText.textContent = win ? "WIN" : "TRY AGAIN";
+    rollBtn.textContent=win?"WIN! RESTART":"OVER. RESTART";
+    statusText.textContent=win?"VICTORY":"DEFEAT";
 }
 
-premiumBtn.addEventListener("click", ()=>{
-    premium = !premium;
-    premiumBtn.textContent = premium ? "PREMIUM ON" : "PREMIUM OFF";
+canvas.addEventListener("touchstart",e=>{
+    if(!gameActive){startGame();return;}
+},{passive:false});
+
+canvas.addEventListener("touchend",()=>{
+    if(gameActive) triggerFire();
+},{passive:false});
+
+rollBtn.addEventListener("click",()=>{
+    if(!gameActive) startGame();
 });
 
-rollBtn.addEventListener("click", roll);
+premiumBtn.addEventListener("click",()=>{
+    premium=!premium;
+    premiumBtn.textContent=premium?"PREM ON":"PREM OFF";
+});
 
-window.addEventListener("load", resizeCanvas);
-window.addEventListener("resize", resizeCanvas);
-
-updateShape();
+window.addEventListener("load",resizeCanvas);
+window.addEventListener("resize",resizeCanvas);
 </script>
-
-</body>
-</html>
